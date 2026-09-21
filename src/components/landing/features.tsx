@@ -8,13 +8,13 @@ const features = [
   },
   {
     icon: GitMerge,
-    title: 'Conflict-Free Sync',
-    body: 'Edit on your phone and your laptop simultaneously. CRDTs (the same tech behind Notion and Figma) merge everything automatically. No conflicts. Ever.',
+    title: 'Conflict-Free Merges',
+    body: 'Edit the same note in two tabs at once. Yjs, a CRDT, merges every change automatically, so neither edit is lost.',
   },
   {
     icon: Users,
     title: 'Real-Time Collaboration',
-    body: 'Open the same note in two tabs. Type in both. Watch the magic. Every keystroke syncs in milliseconds.',
+    body: 'Open the same note in two tabs. Type in both. Watch the magic. Every keystroke syncs between tabs instantly, with no server.',
   },
 ];
 

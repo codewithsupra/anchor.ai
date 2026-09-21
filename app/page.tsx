@@ -5,7 +5,7 @@ import { GithubIcon } from '@/src/components/landing/github-icon';
 const steps = [
   { n: 1, title: 'Write', body: 'Open Anchor and start typing. Saved instantly.' },
   { n: 2, title: 'Go offline', body: 'Keep working. Everything persists locally.' },
-  { n: 3, title: 'Reconnect', body: 'Changes sync automatically. No manual save.' },
+  { n: 3, title: 'Come back', body: 'Reload, close the tab, come back: it is all still there.' },
 ];
 
 function HowItWorks() {
@@ -36,7 +36,7 @@ function Tech() {
     <section className="bg-muted/30 py-16">
       <div className="mx-auto max-w-3xl px-6 text-center">
         <p className="text-base leading-7 text-muted-foreground">
-          Built with Yjs (CRDTs), IndexedDB, Tiptap, and WebSockets. Every
+          Built with Yjs (CRDTs), IndexedDB, Tiptap, and the BroadcastChannel API. Every
           architectural decision prioritizes your data ownership.
         </p>
       </div>
@@ -50,7 +50,7 @@ function Footer() {
       <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-6 py-8 text-sm text-muted-foreground sm:flex-row">
         <p>
           Built by{' '}
-          <a href="https://codewithsupra.github.io/MyPortfolio2026/" target="_blank" rel="noopener noreferrer" className="font-medium text-foreground hover:text-teal-600">
+          <a href="https://supratim-software-portfolio.vercel.app" target="_blank" rel="noopener noreferrer" className="font-medium text-foreground hover:text-teal-600">
             Supratim Sarkar
           </a>
         </p>

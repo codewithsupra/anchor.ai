@@ -46,7 +46,7 @@ export function Hero() {
         </h1>
         <p className="mx-auto mt-6 max-w-2xl text-lg leading-8 text-muted-foreground">
           Anchor is a local-first note-taking app. Every keystroke is saved to
-          your browser instantly. Works offline. Syncs when you&apos;re ready. No
+          your browser instantly. Works offline. Syncs live between tabs. No
           cloud required.
         </p>
         <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
