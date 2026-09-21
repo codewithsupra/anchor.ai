@@ -2,181 +2,112 @@
 
 # Anchor
 
-**Notes that never disappear. Sync that just works. Offline by default.**
+**Local-first notes. Every keystroke saved in your browser. Works offline.**
 
-[![Live App](https://img.shields.io/badge/Live%20App-anchor.ai-0f172a?style=for-the-badge&logo=vercel&logoColor=white)](https://anchor-19sfa4pg2-supratims-projects-a44a3625.vercel.app)
-[![License: MIT](https://img.shields.io/badge/License-MIT-22c55e?style=for-the-badge)](LICENSE)
+[![Live App](https://img.shields.io/badge/Live%20App-anchor-0f172a?style=for-the-badge&logo=vercel&logoColor=white)](https://anchor-ai-indol.vercel.app)
 [![Next.js](https://img.shields.io/badge/Next.js-16-000000?style=for-the-badge&logo=nextdotjs&logoColor=white)](https://nextjs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178c6?style=for-the-badge&logo=typescript&logoColor=white)](https://typescriptlang.org)
 [![Yjs CRDT](https://img.shields.io/badge/CRDT-Yjs-f97316?style=for-the-badge)](https://yjs.dev)
-[![Offline First](https://img.shields.io/badge/Offline-First-10b981?style=for-the-badge)](https://offlinefirst.org)
 
-*Every keystroke saved locally first. Syncs across devices automatically. Conflicts resolved without asking you.*
-
-**[Live App](https://anchor-19sfa4pg2-supratims-projects-a44a3625.vercel.app) · [Architecture](#how-it-works) · [Report Bug](https://github.com/codewithsupra/anchor.ai/issues/new)**
+**[Live App](https://anchor-ai-indol.vercel.app) · [How it works](#how-it-works) · [Report Bug](https://github.com/codewithsupra/anchor.ai/issues/new)**
 
 </div>
 
 ---
 
-## Demo
+## What it does today
 
-> **30-second demo** — open two windows side by side, type in one, watch it appear in the other. Go offline, keep typing, come back online. Everything syncs. No data lost, no conflicts.
+- **Offline by default.** Every note is a Yjs document persisted to IndexedDB on every keystroke. There is no server in the write path, so losing your connection changes nothing.
+- **Live tab-to-tab sync.** Open the same note in two tabs of the same browser and type in both: edits merge through Yjs, with no server involved.
+- **Conflict-free merges.** Concurrent edits from two tabs are merged by the CRDT, not by "last write wins."
 
-<!-- Replace this link with your Loom / YouTube URL after recording -->
-[![Watch the Anchor Demo](https://img.shields.io/badge/▶%20Watch%20Demo-30%20seconds-0f172a?style=for-the-badge&logo=youtube&logoColor=white)](https://anchor-19sfa4pg2-supratims-projects-a44a3625.vercel.app)
+**Not built yet:** cross-device sync. `SyncManager` is a stub for a WebSocket relay (see [Roadmap](#roadmap)); today, notes live in one browser.
 
-**What the demo shows:**
-1. Open the same note in two browser windows side by side
-2. Type in the left window — characters appear in the right window in real time
-3. **DevTools → Network → Offline** — keep typing in the left window
-4. Go back online — everything syncs, zero data lost
-5. No "which version do you want to keep?" prompt. Ever.
+### Try it
 
----
-
-## The Problem
-
-Most note apps treat the server as the source of truth. Your browser is just a thin client. That means:
-
-- No internet? Loading spinner. Can't write.
-- Network hiccup? Changes lost or overwritten.
-- Two devices both offline? "Conflict detected — pick one."
-
-**Anchor inverts this.** The browser is the database. The server is optional.
+1. Open [the app](https://anchor-ai-indol.vercel.app/app) in two tabs side by side.
+2. Type in one tab; the text appears in the other.
+3. DevTools → Network → Offline, keep typing, reload the tab: everything is still there.
 
 ---
 
-## What Makes Anchor Different
+## How it works
 
-| | Traditional Notes App | Anchor |
-|---|---|---|
-| Works offline | Partial / spinner | ✅ Full — browser is the DB |
-| Keystroke survival | Server-dependent | ✅ IndexedDB — survives crashes |
-| Multi-device sync | Last-write-wins | ✅ CRDT merge — both versions survive |
-| Conflict resolution | Manual | ✅ Automatic — character-level merge |
-| App load time | Grows with data | ✅ Constant — per-note isolation |
-| Server dependency | Required | ✅ Stateless relay — easily self-hosted |
+### One Y.Doc per note, persisted locally
 
----
+Each note is its own `Y.Doc`, persisted with `y-indexeddb` under `anchor-note-<id>`. A separate **Dexie** table stores metadata (title, timestamps, order), so the sidebar loads without deserializing every note's CRDT history.
 
-## How It Works
+### Tab sync with BroadcastChannel (`src/lib/crdt/broadcast-provider.ts`)
 
-### Local-first architecture
+A small custom provider (~70 lines) instead of a library:
 
-Every note is a **Yjs Y.Doc** — a CRDT (Conflict-free Replicated Data Type) stored in IndexedDB via `y-indexeddb`. Every keystroke is written locally first. The network is optional.
+- Every local Yjs update is posted on a per-note `BroadcastChannel`.
+- Incoming updates are applied with the provider itself as the **origin**, so they are neither echoed back nor re-broadcast.
+- A newly opened tab sends `request-state`; open tabs reply with their full state, so the new tab converges immediately.
 
-The sync server is stateless — it relays Yjs update messages between clients and stores nothing permanently. If the server is unreachable, the app keeps working. When connectivity returns, it exchanges state vectors with each client and replays only the missing operations.
-
-### One Y.Doc per note
-
-Each note gets its own Y.Doc keyed by note ID. A separate **Dexie** catalog stores note metadata (title, timestamp, sort order). This means app load time is constant regardless of how many notes you have — you never pay the cost of loading every document's CRDT history just to open the sidebar.
+`y-indexeddb` persists but does not broadcast between tabs; this provider fills exactly that gap.
 
 ### Conflict resolution
 
-Yjs uses a variant of the **LSEQ** algorithm for text. If you type "hello" on your laptop and "world" at the same cursor position on your phone while both are offline, Yjs doesn't pick a winner — it merges at the character level using each operation's logical timestamp and author ID. Both devices converge to the same document when they reconnect, deterministically, without server arbitration.
+Yjs merges concurrent text edits with its **YATA** algorithm: each insertion carries a unique ID and a reference to its neighbours, so every replica applies the same deterministic ordering and converges to the same text without a coordinator.
 
-### Sync lifecycle
+### Undo
 
-```
-t0  Online    → Y.Doc updates → IndexedDB + relay server
-t1  Offline   → Y.Doc updates → IndexedDB only (queued)
-t2  Reconnect → state vector exchange with relay → missing ops replayed
-t3  Other device → receives ops → CRDT merge → identical document
-```
-
-This is the same conflict-free replication technology that powers **Figma's collaborative canvas** and **Notion's real-time editing** — running in your browser with a stateless relay.
+StarterKit's snapshot-based undo is disabled (`undoRedo: false`); undo/redo comes from Tiptap's Collaboration extension, which operates on Yjs operations and stays consistent with the CRDT.
 
 ---
 
-## Tech Stack
+## Tech stack
 
-| Layer | Choice | Why |
-|---|---|---|
-| Framework | Next.js 16 (App Router) | Routing, SSR landing, deployment |
-| Editor | Tiptap v2 + ProseMirror | Headless rich text, native Yjs extension |
-| CRDT engine | Yjs | Battle-tested — used by Notion, JetBrains, 20k+ apps |
-| Local persistence | y-indexeddb | Official Yjs adapter, zero config |
-| Tab sync | y-webrtc (BroadcastChannel) | Sub-millisecond same-origin tab sync, no signaling server |
-| Cross-device sync | y-websocket | Stateless relay, auto-reconnect built in |
-| Metadata store | Dexie.js | Clean IndexedDB wrapper for structured note catalog |
-| Styling | Tailwind CSS + shadcn/ui | Consistent, accessible, fast |
-| Sync server | Node.js y-websocket | Deployed on Railway |
-| Deployment | Vercel (frontend) + Railway (sync server) | Zero-config deploys |
+| Layer | Choice |
+|---|---|
+| Framework | Next.js 16 (App Router) |
+| Editor | Tiptap 3 + ProseMirror, Collaboration extension |
+| CRDT | Yjs |
+| Local persistence | y-indexeddb (documents), Dexie (metadata) |
+| Tab sync | Custom `BroadcastProvider` (BroadcastChannel API) |
+| Auth | Clerk |
+| Styling | Tailwind CSS + shadcn/ui |
+| Tests | Vitest |
 
 ---
 
-## Architecture Decisions
-
-**Why one Y.Doc per note instead of one shared document?**
-Per-note isolation means constant-time app load. Loading a single shared document would require deserializing the entire CRDT history of every note on startup — that's O(n) in note count. Isolation keeps it O(1). Cost: more Y.Doc lifecycle management in the client.
-
-**Why y-webrtc with `signaling: []` for tab sync?**
-With an empty signaling array, y-webrtc falls back to BroadcastChannel — no external server, sub-millisecond tab-to-tab sync, zero cost. Cross-device sync is handled separately via y-websocket, keeping the two concerns cleanly separated.
-
-**Why Dexie for the metadata catalog instead of Yjs?**
-Note titles and timestamps are structured relational data — you want to sort and filter them. Yjs is optimized for collaborative text sequences, not queryable catalogs. Mixing them would be fighting the tool. Dexie gives you `.orderBy()`, `.where()`, and `.count()` on IndexedDB without fighting CRDT semantics.
-
-**Why disable StarterKit history in Tiptap?**
-The built-in undo/redo stack operates on editor state snapshots. In a CRDT document, rewinding editor state while the CRDT keeps advancing causes divergence. Yjs ships its own `UndoManager` that operates on CRDT operations directly — that's what Anchor uses instead.
-
----
-
-## Local Setup
+## Local setup
 
 ```bash
-# Prerequisites: Node.js 18+
-
-# 1. Clone
 git clone https://github.com/codewithsupra/anchor.ai.git
 cd anchor.ai
-
-# 2. Install
 npm install
-
-# 3. Start the sync server (separate terminal)
-cd sync-server && npm install && npm start
-# Runs on ws://localhost:1234
-
-# 4. Configure and run the app
-cp .env.example .env.local
-# Set NEXT_PUBLIC_SYNC_SERVER_URL=ws://localhost:1234
-npm run dev
-# Open http://localhost:3000
-
-# 5. Test multi-tab sync
-# Open http://localhost:3000/app in two windows — type in one, watch the other
-
-# 6. Test offline
-# DevTools → Network → Offline → keep typing → come back online → everything synced
+npm run dev      # http://localhost:3000
+npm test         # unit tests
 ```
+
+---
+
+## Tests
+
+`npm test` runs Vitest against the sync layer using real Yjs documents and Node's built-in `BroadcastChannel`:
+
+- two tabs converge on the same text, in both directions
+- a tab opened later receives the existing content via `request-state`
+- concurrent edits made while "offline" merge without losing either side
+- updates are not echoed back to their sender
+- different notes never leak into each other
+- a destroyed provider stops sending and receiving
 
 ---
 
 ## Roadmap
 
-- [ ] Clerk auth — notes tied to account, accessible on any device after login
-- [ ] Neon/Postgres backup for note metadata
-- [ ] Collaboration cursors — see who's typing and where
+- [ ] Cross-device sync through a stateless `y-websocket` relay (the `SyncManager` stub)
+- [ ] Notes tied to a Clerk account
+- [ ] Collaboration cursors
 - [ ] Version history via Yjs snapshots
-- [ ] Chrome extension for one-click capture
-- [ ] End-to-end encryption option
-
----
-
-## License
-
-MIT — see [LICENSE](LICENSE).
 
 ---
 
 <div align="center">
 
-Built by **[Supratim Sarkar](https://linkedin.com/in/supratimsarkar99)**&nbsp;·&nbsp;
-[LinkedIn](https://linkedin.com/in/supratimsarkar99)&nbsp;·&nbsp;
-[GitHub](https://github.com/codewithsupra)&nbsp;·&nbsp;
-[Live App](https://anchor-19sfa4pg2-supratims-projects-a44a3625.vercel.app)
-
-*Open to full-stack / AI engineering roles — let's build something great together.*
+Built by **[Supratim Sarkar](https://supratim-software-portfolio.vercel.app)** · [LinkedIn](https://linkedin.com/in/supratimsarkar99) · [GitHub](https://github.com/codewithsupra)
 
 </div>

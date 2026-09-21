@@ -9,9 +9,8 @@ import * as Y from 'yjs';
  * tabs, and incoming updates are applied with `this` as the origin (so they
  * are not echoed back and not re-persisted as new updates by y-indexeddb).
  *
- * On connect, each side requests the other's full state and replies with its
- * own, so a tab that opens a note already edited in another tab converges
- * immediately.
+ * On connect, a tab both requests the others' full state and announces its
+ * own, so tabs converge in both directions regardless of which loaded first.
  */
 
 type Message =
@@ -31,8 +30,13 @@ export class BroadcastProvider {
     this.channel.onmessage = this.handleMessage;
     this.doc.on('update', this.handleDocUpdate);
 
-    // Ask any already-open tabs for their current state.
+    // Ask any already-open tabs for their current state, and announce ours,
+    // so convergence does not depend on which tab happened to load first.
     this.channel.postMessage({ type: 'request-state' } satisfies Message);
+    this.channel.postMessage({
+      type: 'state',
+      payload: Y.encodeStateAsUpdate(this.doc),
+    } satisfies Message);
   }
 
   private handleDocUpdate = (update: Uint8Array, origin: unknown) => {
